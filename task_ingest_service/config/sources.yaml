@@ -1,0 +1,11 @@
+sources:
+  - id: hn
+    type: rss
+    name: Hacker News
+    url: https://news.ycombinator.com/rss
+    interval_seconds: 600
+  - id: python
+    type: rss
+    name: Python.org News
+    url: https://www.python.org/blogs/rss
+    interval_seconds: 1200
