@@ -28,15 +28,16 @@ class Settings(BaseSettings):
     TASK_API_BASE_URL: str = Field(default="http://localhost:9000/api")
     TASK_API_TOKEN: str = Field(default="")
     TASK_API_TIMEOUT_SECONDS: int = Field(default=20)
+    MOCK_PUBLISH: bool = Field(default=True)
 
     # AI Generation
-    ENABLE_AI: bool = Field(default=True)
+    ENABLE_AI: bool = Field(default=False)
     MODEL_NAME: str = Field(default="gpt-4o-mini")
     MODEL_PROVIDER: str = Field(default="openai")
     MODEL_API_KEY: str = Field(default="")
 
     # Validation
-    ENABLE_VALIDATION: bool = Field(default=True)
+    ENABLE_VALIDATION: bool = Field(default=False)
 
 
 settings = Settings()

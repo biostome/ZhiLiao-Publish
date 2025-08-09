@@ -11,6 +11,7 @@ class TaskApiClient:
         self.base_url = settings.TASK_API_BASE_URL.rstrip("/")
         self.token = settings.TASK_API_TOKEN
         self.timeout = settings.TASK_API_TIMEOUT_SECONDS
+        self.mock = settings.MOCK_PUBLISH
 
     def _headers(self) -> Dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -34,6 +35,10 @@ class TaskApiClient:
         }
 
     async def publish(self, task: StandardTask) -> PublishResult:
+        if self.mock:
+            # Simulate success and echo a fake id
+            fake_id = f"mock-{task.external_source_id[:12]}"
+            return PublishResult(success=True, task_id=fake_id)
         url = f"{self.base_url}/tasks"
         async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers()) as client:
             try:
@@ -48,6 +53,8 @@ class TaskApiClient:
                 return PublishResult(success=False, error=str(exc))
 
     async def find_existing_by_external_id(self, external_source_id: str) -> Optional[str]:
+        if self.mock:
+            return None
         # If the API supports querying by external id; otherwise return None
         url = f"{self.base_url}/tasks"
         params = {"external_source_id": external_source_id}
