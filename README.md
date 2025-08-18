@@ -12,9 +12,8 @@
 ---
 
 ## 一分钟上手（开箱即用）
-1) 进入目录并复制环境配置
+1) 复制环境配置
 ```bash
-cd task_ingest_service
 cp .env.example .env
 ```
 2) 一条命令启动（Docker 推荐）
