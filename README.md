@@ -1,258 +1,296 @@
-## 任务收集与发布系统 (Task Ingest Service)
+# 任务收集与发布系统
 
-持续从互联网采集信息，使用 LLM 解析生成标准化任务，经筛选与验证后发布到“任务管理系统”。采用 FastAPI + 可插拔采集器 + LiteLLM（支持 GPT/Claude/Gemini/Qwen…）。
+一个智能的任务收集系统，自动从各种数据源采集信息，使用 AI 解析生成标准化任务，并发布到任务管理系统。
 
----
+## 特性
 
-### 你将获得什么
-- 开箱即用：默认关闭 AI/验证，开启模拟发布，不依赖外部系统，一条命令即可跑通全链路。
-- 可扩展：RSS/网页/API 采集、可替换 LLM、可接入你的“任务管理系统”。
-- 可观测：内置 /metrics 指标，便于接入 Prometheus + Grafana。
+- 🚀 **开箱即用** - 默认配置下无需外部依赖，一键启动
+- 🔌 **可扩展** - 支持 RSS、网页、API 等多种数据源
+- 🤖 **AI 驱动** - 集成多种 LLM（GPT、Claude、Gemini、Qwen 等）
+- 📊 **可观测** - 内置 Prometheus 指标监控
+- 🐳 **容器化** - 完整的 Docker 支持
 
----
+## 快速开始
 
-## 一分钟上手（开箱即用）
-1) 复制环境配置
+### 1. 环境准备
+
+确保已安装 Docker 和 Docker Compose：
+
 ```bash
-cp .env.example .env
-```
-2) 一条命令启动（Docker 推荐）
-```bash
-docker compose up --build -d
-```
-3) 验证
-```bash
-# 健康检查
-curl -s http://127.0.0.1:8000/health
-# 运行一次采集-生成-发布（模拟发布，不会请求外部）
-curl -X POST http://127.0.0.1:8000/run-now
-```
-默认行为：
-- `MOCK_PUBLISH=true`，发布阶段只返回“发布成功”的模拟结果。
-- `ENABLE_AI=false`，不调用大模型；使用安全后备生成。
-- `ENABLE_VALIDATION=false`，不做外链校验。
-- `SCHEDULER_ENABLED=false`，不开启定时任务（可手动 `/run-now`）。
-
----
-
-## 部署指南（详细版）
-### 环境要求
-- Linux x86_64，2 核 CPU、4GB+ 内存
-- Docker + Docker Compose 插件
-
-验证：
-```bash
-docker -v
+docker --version
 docker compose version
 ```
 
-### 配置环境
-- 复制并编辑 `.env`
-  - 若保持“开箱即用”，可不改。
-  - 若要真实发布，至少需要：`MOCK_PUBLISH=false`、设置 `TASK_API_BASE_URL` 与 `TASK_API_TOKEN`。
+### 2. 配置环境
 
-- 配置数据源 `config/sources.yaml`（已给示例）
+```bash
+# 复制环境配置文件
+cp .env.example .env
+
+# 根据需要编辑配置（可选）
+vim .env
+```
+
+### 3. 启动服务
+
+```bash
+# 启动所有服务
+docker compose up --build -d
+
+# 查看日志
+docker compose logs -f app
+```
+
+### 4. 验证运行
+
+```bash
+# 健康检查
+curl http://localhost:8000/health
+
+# 手动触发一次任务采集
+curl -X POST http://localhost:8000/run-now
+
+# 查看配置信息
+curl http://localhost:8000/config
+```
+
+## 配置说明
+
+### 核心配置（.env 文件）
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `MOCK_PUBLISH` | 模拟发布模式 | `true` |
+| `ENABLE_AI` | 启用 AI 生成 | `false` |
+| `ENABLE_VALIDATION` | 启用链接验证 | `false` |
+| `SCHEDULER_ENABLED` | 启用定时任务 | `false` |
+
+### 数据源配置
+
+编辑 `config/sources.yaml` 文件：
+
 ```yaml
 sources:
-  - id: hn
+  - id: hackernews
     type: rss
     name: Hacker News
     url: https://news.ycombinator.com/rss
     interval_seconds: 600
+  
+  - id: github_trending
+    type: rss
+    name: GitHub Trending
+    url: https://github.com/trending/python.atom
+    interval_seconds: 3600
 ```
 
-### 启动与管理
+### AI 模型配置
+
+要启用 AI 功能，需要配置以下环境变量：
+
 ```bash
-# 启动
-docker compose up --build -d
-# 查看日志
-docker compose logs -f app
-# 重启
-docker compose restart app
-# 停止
-docker compose down
-```
-
-### 开启定时任务（可选）
-编辑 `.env`：
-```
-SCHEDULER_ENABLED=true
-```
-然后：
-```bash
-docker compose restart app
-```
-
-### 生产建议
-- 置于 Nginx/Traefik 后，通过 HTTPS 暴露
-- 限制 /metrics 只给监控系统访问
-- 合理设置采集间隔与 User-Agent，避免过载目标站
-- Postgres 定期备份；Redis 可开启持久化（可选）
-
----
-
-## 配置说明（.env 关键项）
-- 应用运行
-  - `APP_NAME`：应用名称
-  - `LOG_LEVEL`：日志级别（INFO/DEBUG…）
-  - `SCHEDULER_ENABLED`：是否开启定时任务（默认 false）
-  - `DATA_SOURCES_FILE`：数据源配置文件路径
-
-- 去重与存储
-  - `REDIS_URL`：Redis 连接串（用于去重；不可用时自动降级为“不去重”）
-  - `POSTGRES_DSN`：Postgres DSN（如未连通，系统自动跳过初始化，不影响跑通）
-
-- 发布（对接任务管理系统）
-  - `MOCK_PUBLISH`：模拟发布（默认 true）
-  - `TASK_API_BASE_URL`、`TASK_API_TOKEN`：真实发布所需
-
-- AI 生成
-  - `ENABLE_AI`：是否启用大模型（默认 false）
-  - `MODEL_NAME`：模型名（示例：`gpt-4o-mini`、`gemini/gemini-1.5-flash`、`qwen/qwen2.5-7b-instruct` 等）
-  - `MODEL_API_KEY`：模型 API Key
-  - `MODEL_PROVIDER`：可选辅助（openai/anthropic/gemini 等）
-
-- 校验
-  - `ENABLE_VALIDATION`：是否访问源链接进行可达性校验
-
----
-
-## 模型配置（含 Gemini 支持）
-使用 LiteLLM 统一封装，支持 GPT/Claude/Gemini/Qwen/Mistral 等。
-
-- 启用 Gemini（Google API）
-```
+# 启用 AI
 ENABLE_AI=true
+
+# OpenAI GPT
+MODEL_NAME=gpt-4o-mini
+MODEL_API_KEY=your_openai_api_key
+
+# Google Gemini
 MODEL_NAME=gemini/gemini-1.5-flash
-MODEL_API_KEY=你的_Gemini_API_Key
+MODEL_API_KEY=your_gemini_api_key
 MODEL_PROVIDER=gemini
-```
-- 若使用 Vertex AI：
-```
-ENABLE_AI=true
-MODEL_NAME=vertex_ai/gemini-1.5-pro
-# 配置 GCP 凭据（例如）
-# export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service_account.json
+
+# 其他模型（Claude、Qwen 等）
+MODEL_NAME=anthropic/claude-3-haiku-20240307
+MODEL_API_KEY=your_claude_api_key
 ```
 
-提示：不想立即配置模型？保持 `ENABLE_AI=false` 即可，系统会用后备逻辑直接生成任务。
+## API 接口
 
----
+### 基础接口
 
-## 运行与监控
-- 健康检查
-```bash
-curl -s http://127.0.0.1:8000/health
-```
-- 运行一次流水线
-```bash
-curl -X POST http://127.0.0.1:8000/run-now
-```
-- 配置快照（敏感信息已脱敏）
-```bash
-curl -s http://127.0.0.1:8000/config | jq .
-```
-- Prometheus 指标
-```bash
-curl -s http://127.0.0.1:8000/metrics | head
-```
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 健康检查 |
+| GET | `/config` | 获取配置信息 |
+| POST | `/run-now` | 手动触发任务采集 |
+| GET | `/metrics` | Prometheus 监控指标 |
 
----
+### 示例响应
 
-## 本服务 API 文档
-- Base URL：`http://<host>:8000`
-- 认证：默认无（生产建议加网关或网络层限制）
-
-1) GET `/health`
-- 返回：`{"status":"ok","app":"TaskIngestService"}`
-
-2) GET `/config`
-- 返回：当前配置（Key/Token 已脱敏）
-
-3) POST `/run-now`
-- 作用：触发一次采集→生成→筛选→验证→发布
-- 返回：`{"status":"done"}`
-
-4) GET `/metrics`
-- Prometheus 指标：
-  - `ingest_collected_items{collector}`
-  - `ingest_filtered_items{stage,reason}`
-  - `ingest_published_tasks`
-  - `ingest_publish_failures{reason}`
-
----
-
-## 对接“任务管理系统”协议（本服务调用外部）
-- 认证：
-  - Header：`Authorization: Bearer <TASK_API_TOKEN>`，`Content-Type: application/json`
-  - 传输：HTTPS
-
-- 端点：
-  1) POST `/tasks`（发布新任务）
+**健康检查**
 ```json
 {
-  "title": "示例标题",
-  "description": "任务详细描述……",
+  "status": "ok",
+  "app": "TaskIngestService"
+}
+```
+
+**手动触发**
+```json
+{
+  "status": "done",
+  "collected": 15,
+  "generated": 12,
+  "published": 8
+}
+```
+
+## 部署指南
+
+### 开发环境
+
+```bash
+# 启动开发环境
+docker compose up --build
+
+# 实时查看日志
+docker compose logs -f app
+```
+
+### 生产环境
+
+1. **配置环境变量**
+```bash
+# 启用真实发布
+MOCK_PUBLISH=false
+TASK_API_BASE_URL=https://your-task-system.com/api
+TASK_API_TOKEN=your_api_token
+
+# 启用定时任务
+SCHEDULER_ENABLED=true
+
+# 配置数据库
+POSTGRES_DSN=postgresql://user:pass@host:5432/dbname
+REDIS_URL=redis://host:6379/0
+```
+
+2. **启用 HTTPS**
+```bash
+# 使用 Nginx 或 Traefik 反向代理
+# 配置 SSL 证书
+# 限制 /metrics 端点访问
+```
+
+3. **监控配置**
+```bash
+# 接入 Prometheus
+# 配置 Grafana 仪表板
+# 设置告警规则
+```
+
+## 任务管理系统对接
+
+本服务作为任务生产者，需要对接外部任务管理系统。
+
+### 发布任务接口
+
+**POST** `/tasks`
+
+```json
+{
+  "title": "任务标题",
+  "description": "详细描述",
   "priority": "medium",
   "status": "not_started",
   "source": {
-    "source_id": "hn",
-    "source_url": "https://example.com/item/123",
-    "external_source_id": "sha256hash123..."
+    "source_id": "hackernews",
+    "source_url": "https://news.ycombinator.com/item?id=123",
+    "external_source_id": "sha256_hash"
   },
-  "created_at": "2025-01-01T12:00:00Z",
-  "meta": {"generator": "gpt-4o-mini"}
+  "created_at": "2024-01-01T12:00:00Z",
+  "meta": {
+    "generator": "gpt-4o-mini"
+  }
 }
 ```
-响应（建议任一兼容）：
-```json
-{"id": "12345"}
+
+### 查询任务接口
+
+**GET** `/tasks?external_source_id=hash`
+
+用于避免重复发布相同任务。
+
+## 监控指标
+
+系统提供以下 Prometheus 指标：
+
+- `ingest_collected_items{collector}` - 采集到的条目数
+- `ingest_filtered_items{stage,reason}` - 过滤的条目数
+- `ingest_published_tasks` - 发布的任务数
+- `ingest_publish_failures{reason}` - 发布失败数
+
+## 故障排除
+
+### 常见问题
+
+**Q: 启动失败？**
+A: 检查 Docker 服务状态，确保端口 8000 未被占用
+
+**Q: 无任务生成？**
+A: 检查数据源配置，手动调用 `/run-now` 测试
+
+**Q: AI 生成失败？**
+A: 验证 API Key 配置，检查网络连接
+
+**Q: 发布失败？**
+A: 检查任务管理系统 API 配置和权限
+
+### 调试命令
+
+```bash
+# 查看容器状态
+docker compose ps
+
+# 查看详细日志
+docker compose logs app
+
+# 进入容器调试
+docker compose exec app bash
+
+# 重启服务
+docker compose restart app
 ```
-或：
-```json
-{"task_id": "12345"}
+
+## 开发指南
+
+### 项目结构
+
 ```
-或：
-```json
-{"data": {"id": "12345"}}
+├── app/                 # 应用程序代码
+│   ├── main.py         # FastAPI 应用入口
+│   ├── config.py       # 配置管理
+│   ├── models.py       # 数据模型
+│   ├── scheduler.py    # 定时任务
+│   ├── collectors/     # 数据采集器
+│   ├── ai/            # AI 生成模块
+│   ├── filters/       # 内容过滤器
+│   ├── validator/     # 内容验证器
+│   └── publisher/     # 任务发布器
+├── config/             # 配置文件
+│   └── sources.yaml   # 数据源配置
+├── docker-compose.yml  # Docker 编排
+├── Dockerfile         # 容器构建
+├── requirements.txt   # Python 依赖
+└── .env.example      # 环境变量示例
 ```
 
-  2) GET `/tasks`（根据 `external_source_id` 查询，避免重复）
-- 查询参数：`external_source_id=<值>`
-- 响应（建议）：
-```json
-{"items": [{"id": "12345", "external_source_id": "sha256hash123..."}]}
-```
+### 扩展开发
 
-  3) PATCH `/tasks/{id}`（更新任务）
-```json
-{"title": "新标题","description": "新描述","priority": "high","status": "in_progress"}
-```
+**添加新的数据采集器**
 
-- 字段约定（建议）：
-  - `title`：1-200 字；`description`：<=2000 字
-  - `priority`：low|medium|high（默认 medium）
-  - `status`：not_started|in_progress|done|blocked（默认 not_started）
-  - `source.source_id`：数据源 ID；`source.source_url`：原文链接
-  - `source.external_source_id`：来源幂等键（本服务用 source_id+URL 计算 sha256）
-  - `created_at`：ISO8601
-  - `meta`：扩展信息
+1. 在 `app/collectors/` 创建新的采集器类
+2. 继承 `BaseCollector` 基类
+3. 实现 `collect()` 方法
+4. 在配置文件中注册
 
-- 幂等与去重：建议任务系统对 `external_source_id` 建立唯一约束，并支持查询参数。
+**添加新的内容过滤器**
 
----
+1. 在 `app/filters/` 创建过滤器类
+2. 继承 `BaseFilter` 基类
+3. 实现 `filter()` 方法
 
-## FAQ
-- 一直无任务？
-  - 先手动调用 `/run-now`；检查 `config/sources.yaml` 是否可访问；看 `/metrics` 的过滤原因。
-- 发布 401/403？
-  - 检查 `TASK_API_TOKEN` 与权限；未对接前可先用 `MOCK_PUBLISH=true` 验链路。
-- 要用 AI？
-  - `ENABLE_AI=true` + 设置 `MODEL_API_KEY` + 按需选择 `MODEL_NAME`（支持 Gemini，见上）。
-- 校验失败？
-  - 若源站不稳定，可先 `ENABLE_VALIDATION=false`。
+## 许可证
 
----
-
-## 许可
-MIT
+MIT License
